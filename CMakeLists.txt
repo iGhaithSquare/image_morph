@@ -13,4 +13,4 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../bin/$<CONFIG>/)
 add_executable(image_morph)
 
 target_sources(image_morph PRIVATE ${SOURCES})
-
+target_include_directories(image_morph PRIVATE vendors/stb/)

@@ -1,6 +1,15 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+#ifndef STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#endif
+#ifndef STB_IMAGE_WRITE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#endif
+#include "stb_image_write.h"
+#include "stb_image.h"
 typedef struct args{
     char* img1;
     char* img2;
@@ -16,9 +25,17 @@ typedef struct args{
         unsigned pad5 : 1;
     } flags;
 } args;
+typedef struct image{
+    int width;
+    int height;
+    int channels;
+    stbi_uc *data;
+} image;
 int main(int argc,char** argv){
+    image Img1,Img2;
+    stbi_uc* out_data=NULL;
     args Args={0};
-    int i;
+    int i,j,coordinate;
     if (argc==1){
         printf("Expected 3 arguments got none, do %s --help for usage",argv[0]);
         return -1;
@@ -39,8 +56,48 @@ int main(int argc,char** argv){
             Args.flags.type=1;
         else if(!strcmp(argv[i],"-a"))
             Args.flags.morph=1;
-        printf("%s\n",argv[i]);
     }
-    printf("Flags: Type:%d\tm_type:%d",Args.flags.type,Args.flags.morph);
+    Img1.data=stbi_load(Args.img1,&Img1.width,&Img1.height,&Img1.channels,4);
+    if(!Img1.data){
+        printf("Failed to load \"%s\"\nError: %s",Args.img1,stbi_failure_reason());
+        return -1;
+    }
+    Img2.data=stbi_load(Args.img2,&Img2.width,&Img2.height,&Img2.channels,4);
+    if(!Img2.data){
+        printf("Failed to load \"%s\"\nError: %s",Args.img2,stbi_failure_reason());
+        stbi_image_free(Img1.data);
+        return -1;
+    }
+    if(Img1.height!=Img2.height||Img1.width!=Img2.width){
+        printf("The 2 images dont have the same dimensions.");
+        stbi_image_free(Img1.data);
+        stbi_image_free(Img2.data);
+        return -1;
+    }
+    out_data=malloc(Img1.width*Img1.height*4);
+    if(!out_data){
+        printf("Failed to allocate memory to output data");
+        stbi_image_free(Img1.data);
+        stbi_image_free(Img2.data);
+        return -1;
+    }
+    for(i=0;i<Img1.height;i++)
+        for(j=0;j<Img2.width;j++){
+            coordinate=(i*Img1.width+j)*4;
+            if(i+j<(Img1.width+Img1.height)/2){
+                memcpy(out_data+coordinate,Img1.data+coordinate,4);
+            }
+            else{
+                memcpy(out_data+coordinate,Img2.data+coordinate,4);
+            }
+        }
+    stbi_image_free(Img1.data);
+    stbi_image_free(Img2.data);
+    if(!stbi_write_png(Args.out,Img1.width,Img1.height,4,out_data,Img1.width*4)){
+        printf("Failed to write \"%s\"",Args.out);
+        free(out_data);
+        return -1;
+    };
+    free(out_data);
     return 0;
 }
