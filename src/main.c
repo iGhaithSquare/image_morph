@@ -30,12 +30,50 @@ typedef struct image{
     int height;
     int channels;
     stbi_uc *data;
+    int* index_array;
 } image;
+void radix_sort(stbi_uc* data,int* index_array,int size,stbi_uc* tmp_data,int* tmp_iarr){
+    stbi_uc* o_data=data;
+    int* o_iarr=index_array;
+    int i;
+    int pass;
+    for(pass=2;pass>=0;pass--){
+        int count_table[256]={0};
+        int position[256];
+        int sum=0;
+        for(i=0;i<size;i++)
+            count_table[data[i*4+pass]]++;
+        for(i=0;i<256;i++){
+            position[i]=sum;
+            sum+=count_table[i];
+        }
+        for(i=0;i<size;i++){
+            int key=data[i*4+pass];
+            int dst=position[key]++;
+            memcpy(tmp_data+dst*4,data+i*4,4);
+            if(index_array)
+                tmp_iarr[dst]=index_array[i];
+        }
+        stbi_uc *tmp_data_ptr =data;
+        data=tmp_data;
+        tmp_data=tmp_data_ptr;
+        if(index_array){
+            int *tmp_index_ptr =index_array;
+            index_array=tmp_iarr;
+            tmp_iarr=tmp_index_ptr;
+        }
+    }
+    memcpy(o_data,data,(size_t)size*4);
+    if(index_array)
+        memcpy(o_iarr,index_array,(size_t)size*sizeof(int));
+}
 int main(int argc,char** argv){
     image Img1,Img2;
     stbi_uc* out_data=NULL;
     args Args={0};
-    int i,j,coordinate;
+    int i,j,coordinate,img1_size,k,gm,cm,g,dr,dg,db;
+    stbi_uc* tmp_data=NULL;
+    int* tmp_array=NULL;
     if (argc==1){
         printf("Expected 3 arguments got none, do %s --help for usage",argv[0]);
         return -1;
@@ -62,6 +100,7 @@ int main(int argc,char** argv){
         printf("Failed to load \"%s\"\nError: %s",Args.img1,stbi_failure_reason());
         return -1;
     }
+    Img2.index_array=NULL;
     Img2.data=stbi_load(Args.img2,&Img2.width,&Img2.height,&Img2.channels,4);
     if(!Img2.data){
         printf("Failed to load \"%s\"\nError: %s",Args.img2,stbi_failure_reason());
@@ -74,23 +113,51 @@ int main(int argc,char** argv){
         stbi_image_free(Img2.data);
         return -1;
     }
-    out_data=malloc(Img1.width*Img1.height*4);
-    if(!out_data){
-        printf("Failed to allocate memory to output data");
+    img1_size=Img1.height*Img1.width;
+    Img2.index_array=(int*)malloc(sizeof(int)*img1_size);
+    if(!Img2.index_array){
+        printf("Failed to allocate memory to image 2 index array");
         stbi_image_free(Img1.data);
         stbi_image_free(Img2.data);
         return -1;
     }
-    for(i=0;i<Img1.height;i++)
-        for(j=0;j<Img2.width;j++){
-            coordinate=(i*Img1.width+j)*4;
-            if(i+j<(Img1.width+Img1.height)/2){
-                memcpy(out_data+coordinate,Img1.data+coordinate,4);
-            }
-            else{
-                memcpy(out_data+coordinate,Img2.data+coordinate,4);
-            }
-        }
+    out_data=(stbi_uc*)malloc(img1_size*4);
+    if(!out_data){
+        printf("Failed to allocate memory to output data");
+        stbi_image_free(Img1.data);
+        stbi_image_free(Img2.data);
+        free(Img2.index_array);
+        return -1;
+    }
+    tmp_data=(stbi_uc*)malloc(img1_size*4);
+    if(!tmp_data){
+        printf("Failed to allocate memory to tmp data");
+        stbi_image_free(Img1.data);
+        stbi_image_free(Img2.data);
+        free(Img2.index_array);
+        free(out_data);
+        return -1;
+    }
+    tmp_array=(int*)malloc(sizeof(int)*img1_size);
+    if(!tmp_array){
+        printf("Failed to allocate memory to tmp index array");
+        stbi_image_free(Img1.data);
+        stbi_image_free(Img2.data);
+        free(Img2.index_array);
+        free(out_data);
+        free(tmp_data);
+        return -1;
+    }
+    radix_sort(Img1.data,NULL,img1_size,tmp_data,tmp_array);
+    for(i=0;i<img1_size;i++){
+        Img2.index_array[i]=i;
+    }
+    radix_sort(Img2.data,Img2.index_array,img1_size,tmp_data,tmp_array);
+    free(tmp_data);
+    free(tmp_array);
+    for(i=0;i<img1_size;i++){
+        memcpy(out_data+Img2.index_array[i]*4,Img1.data+i*4,4);
+    }
     stbi_image_free(Img1.data);
     stbi_image_free(Img2.data);
     if(!stbi_write_png(Args.out,Img1.width,Img1.height,4,out_data,Img1.width*4)){
