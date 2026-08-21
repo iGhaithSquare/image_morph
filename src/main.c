@@ -71,7 +71,7 @@ int main(int argc,char** argv){
     image Img1,Img2;
     stbi_uc* out_data=NULL;
     args Args={0};
-    int i,j,coordinate,img1_size,k,gm,cm,g,dr,dg,db;
+    int i,img2_size;
     stbi_uc* tmp_data=NULL;
     int* tmp_array=NULL;
     if (argc==1){
@@ -113,15 +113,15 @@ int main(int argc,char** argv){
         stbi_image_free(Img2.data);
         return -1;
     }
-    img1_size=Img1.height*Img1.width;
-    Img2.index_array=(int*)malloc(sizeof(int)*img1_size);
+    img2_size=Img2.height*Img2.width;
+    Img2.index_array=(int*)malloc(sizeof(int)*img2_size);
     if(!Img2.index_array){
         printf("Failed to allocate memory to image 2 index array");
         stbi_image_free(Img1.data);
         stbi_image_free(Img2.data);
         return -1;
     }
-    out_data=(stbi_uc*)malloc(img1_size*4);
+    out_data=(stbi_uc*)malloc(img2_size*4);
     if(!out_data){
         printf("Failed to allocate memory to output data");
         stbi_image_free(Img1.data);
@@ -129,7 +129,7 @@ int main(int argc,char** argv){
         free(Img2.index_array);
         return -1;
     }
-    tmp_data=(stbi_uc*)malloc(img1_size*4);
+    tmp_data=(stbi_uc*)malloc(img2_size*4);
     if(!tmp_data){
         printf("Failed to allocate memory to tmp data");
         stbi_image_free(Img1.data);
@@ -138,7 +138,7 @@ int main(int argc,char** argv){
         free(out_data);
         return -1;
     }
-    tmp_array=(int*)malloc(sizeof(int)*img1_size);
+    tmp_array=(int*)malloc(sizeof(int)*img2_size);
     if(!tmp_array){
         printf("Failed to allocate memory to tmp index array");
         stbi_image_free(Img1.data);
@@ -148,19 +148,19 @@ int main(int argc,char** argv){
         free(tmp_data);
         return -1;
     }
-    radix_sort(Img1.data,NULL,img1_size,tmp_data,tmp_array);
-    for(i=0;i<img1_size;i++){
+    radix_sort(Img1.data,NULL,img2_size,tmp_data,tmp_array);
+    for(i=0;i<img2_size;i++){
         Img2.index_array[i]=i;
     }
-    radix_sort(Img2.data,Img2.index_array,img1_size,tmp_data,tmp_array);
+    radix_sort(Img2.data,Img2.index_array,img2_size,tmp_data,tmp_array);
     free(tmp_data);
     free(tmp_array);
-    for(i=0;i<img1_size;i++){
+    for(i=0;i<img2_size;i++){
         memcpy(out_data+Img2.index_array[i]*4,Img1.data+i*4,4);
     }
     stbi_image_free(Img1.data);
     stbi_image_free(Img2.data);
-    if(!stbi_write_png(Args.out,Img1.width,Img1.height,4,out_data,Img1.width*4)){
+    if(!stbi_write_png(Args.out,Img2.width,Img2.height,4,out_data,Img2.width*4)){
         printf("Failed to write \"%s\"",Args.out);
         free(out_data);
         return -1;
