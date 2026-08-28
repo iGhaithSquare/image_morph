@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <process.h>
 #ifndef STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #endif
@@ -14,15 +15,17 @@ typedef struct args{
     char* img1;
     char* img2;
     char* out;
+    int fps;
+    int time;
     struct{
         unsigned type : 1;
-        unsigned morph : 1;
-        unsigned out : 1;
-        unsigned pad1 : 1;
+        unsigned easein : 1;
+        unsigned easeout : 1;
         unsigned pad2 : 1;
         unsigned pad3 : 1;
         unsigned pad4 : 1;
         unsigned pad5 : 1;
+        unsigned pad6 : 1;
     } flags;
 } args;
 typedef struct image{
@@ -51,29 +54,27 @@ void radix_sort(stbi_uc* data,int* index_array,int size,stbi_uc* tmp_data,int* t
             int key=data[i*4+pass];
             int dst=position[key]++;
             memcpy(tmp_data+dst*4,data+i*4,4);
-            if(index_array)
-                tmp_iarr[dst]=index_array[i];
+            tmp_iarr[dst]=index_array[i];
         }
         stbi_uc *tmp_data_ptr =data;
+        int *tmp_index_ptr =index_array;
         data=tmp_data;
         tmp_data=tmp_data_ptr;
-        if(index_array){
-            int *tmp_index_ptr =index_array;
-            index_array=tmp_iarr;
-            tmp_iarr=tmp_index_ptr;
-        }
+        index_array=tmp_iarr;
+        tmp_iarr=tmp_index_ptr;
     }
     memcpy(o_data,data,(size_t)size*4);
-    if(index_array)
-        memcpy(o_iarr,index_array,(size_t)size*sizeof(int));
+    memcpy(o_iarr,index_array,(size_t)size*sizeof(int));
 }
 int main(int argc,char** argv){
     image Img1,Img2;
     stbi_uc* out_data=NULL;
     args Args={0};
-    int i,img2_size;
+    int i,j,img2_size;
+    int frame_count;
     stbi_uc* tmp_data=NULL;
     int* tmp_array=NULL;
+    char file_name[512];
     if (argc==1){
         printf("Expected 3 arguments got none, do %s --help for usage",argv[0]);
         return -1;
@@ -92,8 +93,14 @@ int main(int argc,char** argv){
     for(i=4;i<argc;i++){
         if(!strcmp(argv[i],"-video"))
             Args.flags.type=1;
-        else if(!strcmp(argv[i],"-a"))
-            Args.flags.morph=1;
+        else if(!strcmp(argv[i],"-easein"))
+            Args.flags.easein=1;
+        else if(!strcmp(argv[i],"-easeout"))
+            Args.flags.easein=1;
+        else if(!strncmp(argv[i],"-fps:",5))
+            Args.fps=atoi(argv[i]+5);
+        else if(!strncmp(argv[i],"-time:",6))
+            Args.time=atoi(argv[i]+6);
     }
     Img1.data=stbi_load(Args.img1,&Img1.width,&Img1.height,&Img1.channels,4);
     if(!Img1.data){
@@ -121,12 +128,21 @@ int main(int argc,char** argv){
         stbi_image_free(Img2.data);
         return -1;
     }
+    Img1.index_array=(int*)malloc(sizeof(int)*img2_size);
+    if(!Img1.index_array){
+        printf("Failed to allocate memory to image 1 index array");
+        stbi_image_free(Img1.data);
+        stbi_image_free(Img2.data);
+        free(Img2.index_array);
+        return -1;
+    }
     out_data=(stbi_uc*)malloc(img2_size*4);
     if(!out_data){
         printf("Failed to allocate memory to output data");
         stbi_image_free(Img1.data);
         stbi_image_free(Img2.data);
         free(Img2.index_array);
+        free(Img1.index_array);
         return -1;
     }
     tmp_data=(stbi_uc*)malloc(img2_size*4);
@@ -135,6 +151,7 @@ int main(int argc,char** argv){
         stbi_image_free(Img1.data);
         stbi_image_free(Img2.data);
         free(Img2.index_array);
+        free(Img1.index_array);
         free(out_data);
         return -1;
     }
@@ -144,27 +161,94 @@ int main(int argc,char** argv){
         stbi_image_free(Img1.data);
         stbi_image_free(Img2.data);
         free(Img2.index_array);
+        free(Img1.index_array);
         free(out_data);
         free(tmp_data);
         return -1;
     }
-    radix_sort(Img1.data,NULL,img2_size,tmp_data,tmp_array);
     for(i=0;i<img2_size;i++){
+        Img1.index_array[i]=i;
         Img2.index_array[i]=i;
     }
+    radix_sort(Img1.data,Img1.index_array,img2_size,tmp_data,tmp_array);
     radix_sort(Img2.data,Img2.index_array,img2_size,tmp_data,tmp_array);
-    free(tmp_data);
     free(tmp_array);
     for(i=0;i<img2_size;i++){
         memcpy(out_data+Img2.index_array[i]*4,Img1.data+i*4,4);
     }
+    if(Args.flags.type){
+        Args.fps=Args.fps?Args.fps:30;
+        Args.time=Args.time?Args.time:5;
+        frame_count=Args.fps*Args.time;
+        char ffmpeg[1024];
+        snprintf(ffmpeg,sizeof(ffmpeg),"ffmpeg -y -f rawvideo -pixel_format rgba -video_size %dx%d -framerate %d -i - -c:v libx264 -pix_fmt yuv420p \"%s.mp4\"",Img2.width,Img2.height,Args.fps,Args.out);
+        #ifdef _WIN32
+        FILE *pipe=_popen(ffmpeg,"wb");
+        #else
+        FILE *pipe=popen(ffmpeg,"w");
+        #endif
+        if(!pipe){
+            printf("Failed to open ffmpeg. This algorithm uses ffmpeg to produce videos");
+            free(tmp_data);
+            stbi_image_free(Img1.data);
+            stbi_image_free(Img2.data);
+            free(out_data);
+            free(Img1.index_array);
+            free(Img2.index_array);
+            return -1;
+        }
+        for(i=0;i<frame_count-1;i++){
+            for(j=0;j<img2_size;j++){
+                int start=Img1.index_array[j];
+                int end=Img2.index_array[j];
+                int x1=start%Img2.width;
+                int y1=start/Img2.width;
+                int x2=end%Img2.width;
+                int y2=end/Img2.width;
+                int x=x1+(x2-x1)*i/(frame_count-1);
+                int y=y1+(y2-y1)*i/(frame_count-1);
+                int position=(y*Img2.width+x)*4;
+                memcpy(tmp_data+position,Img1.data+j*4,4);
+            }    
+            fwrite(tmp_data,1,img2_size*4,pipe);
+        }
+        fwrite(out_data,1,img2_size*4,pipe);    
+        #ifdef _WIN32
+        int result =_pclose(pipe);
+        #else
+        int result= pclose(pipe);
+        #endif
+        
+        if(result){
+            printf("FFmpeg failed with error code %d",result);
+            free(tmp_data);
+            stbi_image_free(Img1.data);
+            stbi_image_free(Img2.data);
+            free(out_data);
+            free(Img1.index_array);
+            free(Img2.index_array);
+            return -1;
+        }
+    }
+    else{
+        snprintf(file_name,sizeof(file_name),"%s.png",Args.out);
+        if(!stbi_write_png(file_name,Img2.width,Img2.height,4,out_data,Img2.width*4)){
+            printf("Failed to write \"%s\"",Args.out);
+            free(tmp_data);
+            stbi_image_free(Img1.data);
+            stbi_image_free(Img2.data);
+            free(out_data);
+            free(Img1.index_array);
+            free(Img2.index_array);
+            return -1;
+        };
+
+    }
+    free(tmp_data);
     stbi_image_free(Img1.data);
     stbi_image_free(Img2.data);
-    if(!stbi_write_png(Args.out,Img2.width,Img2.height,4,out_data,Img2.width*4)){
-        printf("Failed to write \"%s\"",Args.out);
-        free(out_data);
-        return -1;
-    };
     free(out_data);
+    free(Img1.index_array);
+    free(Img2.index_array);
     return 0;
 }
