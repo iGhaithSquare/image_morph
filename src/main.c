@@ -80,7 +80,7 @@ int main(int argc,char** argv){
         return -1;
     }
     if(!strcmp(argv[1],"--help")){
-        printf("Usage:\n%s <image1> <image2> <out> <optional_arguments>",argv[0]);
+        printf("Usage:\n%s <image1> <image2> <out> <optional_arguments>\noptional arguments:\n\t-video\t\t\tgenerates a video of morphing 2 images\n\t\t-fps:X\t\tfps of the video generated(X Is the argument, default is 30)\n\t\t-time:X\t\ttime of the video generated(X is the argument in seconds, default is 5)\n\t\t-clear\t\tclears the frame buffer before every frame\n\t\t-easein\t\tadds an easein effect to the video generated\n\t\t-easeout\tadds an easeout effect to the video generated",argv[0]);
         return 0;
     }
     if(argc<4){
