@@ -21,11 +21,11 @@ typedef struct args{
         unsigned type : 1;
         unsigned easein : 1;
         unsigned easeout : 1;
+        unsigned clear : 1;
+        unsigned pad1 : 1;
         unsigned pad2 : 1;
         unsigned pad3 : 1;
         unsigned pad4 : 1;
-        unsigned pad5 : 1;
-        unsigned pad6 : 1;
     } flags;
 } args;
 typedef struct image{
@@ -70,11 +70,11 @@ int main(int argc,char** argv){
     image Img1,Img2;
     stbi_uc* out_data=NULL;
     args Args={0};
-    int i,j,img2_size;
-    int frame_count;
+    int i,j,img2_size,frame_count;
     stbi_uc* tmp_data=NULL;
     int* tmp_array=NULL;
-    char file_name[512];
+    char file_name[512],ffmpeg[1024];
+    FILE *pipe;
     if (argc==1){
         printf("Expected 3 arguments got none, do %s --help for usage",argv[0]);
         return -1;
@@ -96,7 +96,9 @@ int main(int argc,char** argv){
         else if(!strcmp(argv[i],"-easein"))
             Args.flags.easein=1;
         else if(!strcmp(argv[i],"-easeout"))
-            Args.flags.easein=1;
+            Args.flags.easeout=1;
+        else if(!strcmp(argv[i],"-clear"))
+            Args.flags.clear=1;
         else if(!strncmp(argv[i],"-fps:",5))
             Args.fps=atoi(argv[i]+5);
         else if(!strncmp(argv[i],"-time:",6))
@@ -180,12 +182,11 @@ int main(int argc,char** argv){
         Args.fps=Args.fps?Args.fps:30;
         Args.time=Args.time?Args.time:5;
         frame_count=Args.fps*Args.time;
-        char ffmpeg[1024];
         snprintf(ffmpeg,sizeof(ffmpeg),"ffmpeg -y -f rawvideo -pixel_format rgba -video_size %dx%d -framerate %d -i - -c:v libx264 -pix_fmt yuv420p \"%s.mp4\"",Img2.width,Img2.height,Args.fps,Args.out);
         #ifdef _WIN32
-        FILE *pipe=_popen(ffmpeg,"wb");
+        pipe=_popen(ffmpeg,"wb");
         #else
-        FILE *pipe=popen(ffmpeg,"w");
+        pipe=popen(ffmpeg,"w");
         #endif
         if(!pipe){
             printf("Failed to open ffmpeg. This algorithm uses ffmpeg to produce videos");
@@ -198,6 +199,13 @@ int main(int argc,char** argv){
             return -1;
         }
         for(i=0;i<frame_count-1;i++){
+            if(Args.flags.clear)
+                memset(tmp_data,0,img2_size*4);
+            float t=(float)i/(float)(frame_count-1);
+            if(Args.flags.easein)
+                t=Args.flags.easeout?t*t*(3.0f-2.0f*t):t*t;
+            else if (Args.flags.easeout)
+                t=1.0f-(1.0f-t)*(1.0f-t);
             for(j=0;j<img2_size;j++){
                 int start=Img1.index_array[j];
                 int end=Img2.index_array[j];
@@ -205,8 +213,8 @@ int main(int argc,char** argv){
                 int y1=start/Img2.width;
                 int x2=end%Img2.width;
                 int y2=end/Img2.width;
-                int x=x1+(x2-x1)*i/(frame_count-1);
-                int y=y1+(y2-y1)*i/(frame_count-1);
+                int x=x1+(x2-x1)*t;
+                int y=y1+(y2-y1)*t;
                 int position=(y*Img2.width+x)*4;
                 memcpy(tmp_data+position,Img1.data+j*4,4);
             }    
