@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include <process.h>
 #ifndef STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #endif

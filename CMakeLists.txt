@@ -4,6 +4,16 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(image_morph)
 
+include(FetchContent)
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb/
+    GIT_TAG master
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/vendors/stb/
+)
+FetchContent_Populate(stb)
+
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
